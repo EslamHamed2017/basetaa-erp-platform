@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Plans ────────────────────────────────────────────────────────────────────
+
+model Plan {
+  code            String   @id
+  name            String
+  billingCycle    String   @default("monthly")
+  listPriceAed    Decimal  @db.Decimal(10, 2)
+  discountPercent Decimal  @db.Decimal(5, 2) @default(0)
+  finalPriceAed   Decimal  @db.Decimal(10, 2)
+  isMostPopular   Boolean  @default(false)
+  isCustom        Boolean  @default(false)
+  description     String?
+  features        String[] // stored as array of feature strings
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenants Tenant[]
+
+  @@map("plans")
+}
+
+// ─── Tenants ─────────────────────────────────────────────────────────────────
+
+enum TenantStatus {
+  pending
+  trial
+  active
+  inactive
+}
+
+enum ProvisioningState {
+  pending
+  provisioning
+  ready
+  failed
+}
+
+model Tenant {
+  id                   String            @id @default(cuid())
+  fullName             String
+  companyName          String
+  email                String            @unique
+  phone                String?
+  desiredSubdomain     String
+  normalizedSubdomain  String            @unique
+  fullDomain           String
+  dbName               String            @unique
+  passwordHash         String
+
+  status               TenantStatus      @default(pending)
+  provisioningState    ProvisioningState @default(pending)
+  isActive             Boolean           @default(false)
+
+  planCode             String
+  plan                 Plan              @relation(fields: [planCode], references: [code])
+  listPriceAed         Decimal           @db.Decimal(10, 2)
+  discountPercent      Decimal           @db.Decimal(5, 2)
+  finalPriceAed        Decimal           @db.Decimal(10, 2)
+  pricingLabel         String?
+
+  trialStartAt         DateTime?
+  trialEndAt           DateTime?
+
+  // Provisioning audit — stores last error if provisioning failed
+  provisioningError    String?
+  provisioningAt       DateTime?
+
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  featureFlags         TenantFeatureFlag[]
+
+  @@map("tenants")
+}
+
+// ─── Feature Flags ────────────────────────────────────────────────────────────
+
+model TenantFeatureFlag {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  flagKey   String
+  flagValue String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, flagKey])
+  @@map("tenant_feature_flags")
+}
