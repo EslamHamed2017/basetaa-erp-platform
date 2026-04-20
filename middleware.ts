@@ -39,6 +39,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
+  // Already-rewritten internal paths — don't rewrite again
+  if (
+    pathname.startsWith('/site') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/workspace/')
+  ) {
+    return NextResponse.next()
+  }
+
   // ── Admin app ─────────────────────────────────────────────────────────────
   if (subdomain === 'control') {
     const url = req.nextUrl.clone()
