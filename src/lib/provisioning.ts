@@ -1,10 +1,11 @@
 import { prisma } from './prisma'
 import { createTenantDatabase, seedTenantDatabase, tenantDatabaseExists } from './tenant-db'
 import { validateSubdomain, buildWorkspaceDomain, buildDbName } from './subdomain'
+import { generateOdooAdminPassword } from './odoo-db'
 import { SignupInput, SignupResult } from '@/types'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { Prisma } from '@prisma/client'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 
 const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS ?? '14')
 const DEFAULT_PLAN = 'growth'
@@ -97,25 +98,22 @@ export async function provisionTenant(input: SignupInput): Promise<SignupResult>
       },
     })
   } catch (err) {
-    // Unique constraint violation — concurrent signup with same email or subdomain
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      (err as Prisma.PrismaClientKnownRequestError).code === 'P2002'
-    ) {
+    if (err instanceof PrismaClientKnownRequestError && err.code === 'P2002') {
       return { success: false, error: 'This email or subdomain is already registered.' }
     }
     throw err
   }
 
-  // 8. Provision tenant database (async — errors are captured, not thrown)
+  // 8. Provision Odoo database (errors are captured, not thrown)
   try {
+    const odooAdminPassword = generateOdooAdminPassword()
     const exists = await tenantDatabaseExists(dbName)
     if (!exists) {
-      await createTenantDatabase(dbName)
+      await createTenantDatabase(dbName, odooAdminPassword)
     }
     await seedTenantDatabase(dbName, { companyName, ownerEmail: email })
 
-    // 9. Mark as ready + set status to trial
+    // 9. Mark as ready + store Odoo credentials
     await prisma.tenant.update({
       where: { id: tenant.id },
       data: {
@@ -123,10 +121,12 @@ export async function provisionTenant(input: SignupInput): Promise<SignupResult>
         status: 'trial',
         isActive: true,
         provisioningError: null,
+        odooDb: dbName,
+        odooAdminPassword,
+        odooModules: ['base'],
       },
     })
   } catch (err) {
-    // Provisioning failed — store error for admin inspection
     const message = err instanceof Error ? err.message : String(err)
     await prisma.tenant.update({
       where: { id: tenant.id },
@@ -136,7 +136,6 @@ export async function provisionTenant(input: SignupInput): Promise<SignupResult>
         status: 'pending',
       },
     })
-    // Still return success from the user's perspective — admin can retry
     return {
       success: true,
       tenantId: tenant.id,
@@ -164,12 +163,21 @@ export async function reprovisionTenant(tenantId: string): Promise<{ success: bo
   })
 
   try {
+    const odooAdminPassword = tenant.odooAdminPassword ?? generateOdooAdminPassword()
     const exists = await tenantDatabaseExists(tenant.dbName)
-    if (!exists) await createTenantDatabase(tenant.dbName)
+    if (!exists) await createTenantDatabase(tenant.dbName, odooAdminPassword)
     await seedTenantDatabase(tenant.dbName, { companyName: tenant.companyName, ownerEmail: tenant.email })
     await prisma.tenant.update({
       where: { id: tenantId },
-      data: { provisioningState: 'ready', status: 'trial', isActive: true, provisioningError: null },
+      data: {
+        provisioningState: 'ready',
+        status: 'trial',
+        isActive: true,
+        provisioningError: null,
+        odooDb: tenant.dbName,
+        odooAdminPassword,
+        odooModules: ['base'],
+      },
     })
     return { success: true }
   } catch (err) {

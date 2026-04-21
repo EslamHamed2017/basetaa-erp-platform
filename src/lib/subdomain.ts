@@ -40,6 +40,13 @@ export function validateSubdomain(raw: string): SubdomainValidation {
     return { valid: false, normalized, error: 'Subdomain must start and end with a letter or number.' }
   }
 
+  // Hyphens are rejected: Odoo dbfilter uses %d (first hostname component) to match
+  // the database name, and we store DBs as tenant_{subdomain}. If the subdomain contains
+  // hyphens, %d gives "my-company" but the DB is "tenant_my_company" — no match.
+  if (normalized.includes('-')) {
+    return { valid: false, normalized, error: 'Subdomain may only contain letters and numbers.' }
+  }
+
   return { valid: true, normalized }
 }
 

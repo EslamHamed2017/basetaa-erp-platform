@@ -1,13 +1,11 @@
 import { prisma } from '@/lib/prisma'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import WorkspaceInactive from './WorkspaceInactive'
 import WorkspacePending from './WorkspacePending'
-import WorkspaceHome from './WorkspaceHome'
 
 export default async function WorkspacePage({ params }: { params: { subdomain: string } }) {
   const tenant = await prisma.tenant.findUnique({
     where: { normalizedSubdomain: params.subdomain },
-    include: { plan: { select: { name: true } } },
   })
 
   if (!tenant) notFound()
@@ -23,12 +21,7 @@ export default async function WorkspacePage({ params }: { params: { subdomain: s
     />
   }
 
-  return <WorkspaceHome tenant={{
-    companyName: tenant.companyName,
-    fullName: tenant.fullName,
-    email: tenant.email,
-    planName: tenant.plan.name,
-    trialEndAt: tenant.trialEndAt ?? null,
-    status: tenant.status,
-  }} />
+  // Active/trial + ready: Nginx normally routes directly to Odoo.
+  // This redirect is a safety fallback for requests that reach Next.js anyway.
+  redirect(`https://${tenant.fullDomain}/web`)
 }

@@ -74,6 +74,11 @@ model Tenant {
   provisioningError    String?
   provisioningAt       DateTime?
 
+  // Odoo backend
+  odooDb               String?           // e.g. "tenant_acme" — Odoo database name
+  odooAdminPassword    String?           // generated at provision time
+  odooModules          String[]          @default([])
+
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
