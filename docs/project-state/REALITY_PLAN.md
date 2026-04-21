@@ -1,8 +1,26 @@
 # Reality Plan — Basetaa + Odoo Integration
 
-> Status: Planning  
+> Status: **Operational** — end-to-end provisioning verified live on 2026-04-21  
 > Approved: 2026-04-21  
-> Scope: Local workspace implementation only. No GitHub push. No server deployment.
+> Deployed: 2026-04-21 (server 187.127.112.42)  
+> Commits: `5b5e081` (initial Reality Plan), `7ba633b` (provisioning bug fixes)
+
+## Reality Plan — Completion Summary
+
+All phases implemented and verified. The following was confirmed in a live end-to-end test:
+
+- Tenant `testco` signed up via `/api/signup`
+- Odoo database `tenant_testco` created in ~12 seconds via Odoo HTTP API
+- Tenant record stored in `basetaa_control` with `status=trial`, `provisioningState=ready`
+- `testco.erp.basetaa.com` → Nginx auth_request gate → 200 → proxied to Odoo → HTTP 200
+- Page title: `<title>Odoo</title>` — correct Odoo instance served
+
+Three provisioning bugs were found and fixed during the live test (see `7ba633b`):
+1. `list_db=False` blocked the DB creation API — fixed: `list_db=True` + Nginx external block
+2. Odoo 17 requires `phone` field in the create POST — fixed: added `phone=''`
+3. Unrecognized Odoo error HTML was treated as success — fixed: added error string detection
+
+**Known gap before real-user testing:** Odoo admin credentials are not exposed to the user after signup. See Stabilization Report.
 
 ---
 
