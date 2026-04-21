@@ -39,7 +39,7 @@ The Reality Plan end-to-end flow is operational on `187.127.112.42`:
 
 ```ini
 dbfilter = ^tenant_%d$
-admin_passwd = SO2vU9bhg94ziArC2ComWi5s
+admin_passwd = [redacted — stored in /opt/basetaa-odoo-deploy/config/odoo.conf on server]
 list_db = True
 workers = 0
 log_level = info

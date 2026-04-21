@@ -30,3 +30,6 @@ next-env.d.ts
 # Logs
 *.log
 npm-debug.log*
+
+# Private local documentation (server values, credentials)
+docs-local/

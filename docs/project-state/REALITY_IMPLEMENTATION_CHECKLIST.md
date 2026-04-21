@@ -8,7 +8,7 @@
 ## Phase 0 — Prerequisites
 
 - [x] Odoo running on server: health check passes (`{"status":"pass"}`)
-- [x] Odoo master password confirmed: `SO2vU9bhg94ziArC2ComWi5s` (in `odoo.conf`)
+- [x] Odoo master password confirmed: `[redacted — see SECRETS_INDEX.md]` (in `odoo.conf`)
 - [x] `list_db = True` confirmed (was `False`, reverted — see Bug 1 below)
 - [x] Nginx `ngx_http_auth_request_module` present and configured
 - [x] `ODOO_URL` and `ODOO_MASTER_PASSWORD` added to server `.env.local`
