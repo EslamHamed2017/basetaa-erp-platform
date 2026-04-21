@@ -1,7 +1,7 @@
 import { prisma } from './prisma'
 import { createTenantDatabase, seedTenantDatabase, tenantDatabaseExists } from './tenant-db'
 import { validateSubdomain, buildWorkspaceDomain, buildDbName } from './subdomain'
-import { generateOdooAdminPassword } from './odoo-db'
+import { generateOdooAdminPassword, setOdooTenantCredentials } from './odoo-db'
 import { SignupInput, SignupResult } from '@/types'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
@@ -112,6 +112,12 @@ export async function provisionTenant(input: SignupInput): Promise<SignupResult>
       await createTenantDatabase(dbName, odooAdminPassword)
     }
     await seedTenantDatabase(dbName, { companyName, ownerEmail: email })
+
+    // Set user's signup credentials as the Odoo admin login
+    const credResult = await setOdooTenantCredentials(dbName, odooAdminPassword, email, password)
+    if (!credResult.success) {
+      throw new Error(`Odoo credential handoff failed: ${credResult.error}`)
+    }
 
     // 9. Mark as ready + store Odoo credentials
     await prisma.tenant.update({

@@ -100,6 +100,100 @@ export async function odooDatabaseExists(dbName: string): Promise<boolean> {
   }
 }
 
+// ─── Set Odoo tenant admin credentials via XML-RPC ───────────────────────────
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+export async function setOdooTenantCredentials(
+  dbName: string,
+  odooAdminPassword: string,
+  userEmail: string,
+  userPassword: string,
+): Promise<{ success: boolean; error?: string }> {
+  const base = getOdooUrl()
+
+  // Step 1: Authenticate as admin to obtain UID
+  const authXml = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>authenticate</methodName>
+  <params>
+    <param><value><string>${escapeXml(dbName)}</string></value></param>
+    <param><value><string>admin</string></value></param>
+    <param><value><string>${escapeXml(odooAdminPassword)}</string></value></param>
+    <param><value><struct/></value></param>
+  </params>
+</methodCall>`
+
+  let authRes: Response
+  try {
+    authRes = await fetch(`${base}/xmlrpc/2/common`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml' },
+      body: authXml,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { success: false, error: `Odoo XML-RPC unreachable: ${msg}` }
+  }
+
+  const authBody = await authRes.text()
+  const uidMatch = authBody.match(/<int>(\d+)<\/int>/)
+  if (!uidMatch) {
+    return { success: false, error: 'Odoo XML-RPC authentication failed — no UID returned.' }
+  }
+  const uid = uidMatch[1]
+
+  // Step 2: Write login, email, password on the admin res.users record
+  const writeXml = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>execute_kw</methodName>
+  <params>
+    <param><value><string>${escapeXml(dbName)}</string></value></param>
+    <param><value><int>${uid}</int></value></param>
+    <param><value><string>${escapeXml(odooAdminPassword)}</string></value></param>
+    <param><value><string>res.users</string></value></param>
+    <param><value><string>write</string></value></param>
+    <param><value><array><data>
+      <value><array><data>
+        <value><int>${uid}</int></value>
+      </data></array></value>
+      <value><struct>
+        <member><name>login</name><value><string>${escapeXml(userEmail)}</string></value></member>
+        <member><name>email</name><value><string>${escapeXml(userEmail)}</string></value></member>
+        <member><name>password</name><value><string>${escapeXml(userPassword)}</string></value></member>
+      </struct></value>
+    </data></array></value></param>
+    <param><value><struct/></value></param>
+  </params>
+</methodCall>`
+
+  let writeRes: Response
+  try {
+    writeRes = await fetch(`${base}/xmlrpc/2/object`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml' },
+      body: writeXml,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { success: false, error: `Odoo XML-RPC write unreachable: ${msg}` }
+  }
+
+  const writeBody = await writeRes.text()
+  if (!writeBody.includes('<boolean>1</boolean>')) {
+    return { success: false, error: `Odoo credential write failed. Response: ${writeBody.slice(0, 200)}` }
+  }
+
+  return { success: true }
+}
+
 // ─── Drop an Odoo database ────────────────────────────────────────────────────
 // Not used in Reality Plan MVP — reserved for future delete-tenant action.
 
