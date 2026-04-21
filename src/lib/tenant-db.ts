@@ -9,6 +9,10 @@ export async function createTenantDatabase(
 ): Promise<void> {
   const result = await createOdooDatabase(dbName, adminPassword)
   if (!result.success) {
+    // "Already exists" is acceptable — DB was created in a prior attempt.
+    // odooDatabaseExists returns false when list_db=False, so we always try to
+    // create and tolerate this specific error.
+    if (result.error?.includes('already exists')) return
     throw new Error(result.error ?? 'Failed to create Odoo database.')
   }
 }

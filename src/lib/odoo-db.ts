@@ -28,7 +28,8 @@ export async function createOdooDatabase(
     login:        'admin',
     password:     adminPassword,
     lang:         'en_US',
-    country_code: '',
+    country_code: 'AE',
+    phone:        '',
   })
 
   let res: Response
@@ -58,6 +59,14 @@ export async function createOdooDatabase(
     }
     if (text.includes('Invalid master password') || text.includes('AccessDenied')) {
       return { success: false, error: 'Invalid Odoo master password.' }
+    }
+    if (text.includes('database manager has been disabled') || text.includes('disabled by the administrator')) {
+      return { success: false, error: 'Odoo database manager is disabled (list_db=False in odoo.conf).' }
+    }
+    if (text.includes('Database creation error')) {
+      // Extract the actual error from the HTML for debugging
+      const match = text.match(/Database creation error[^<]*/)
+      return { success: false, error: match ? match[0] : 'Database creation error (unknown).' }
     }
     // Treat 200 without known error strings as success
     return { success: true }
