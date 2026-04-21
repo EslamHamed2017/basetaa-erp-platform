@@ -81,6 +81,12 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
               ['Company',      tenant.companyName],
               ['Subdomain',    <span key="sd" className="font-mono text-xs text-brand-600">{tenant.normalizedSubdomain}.erp.basetaa.com</span>],
               ['Database',     <span key="db" className="font-mono text-xs text-gray-500">{tenant.dbName}</span>],
+              ['Odoo DB',      tenant.odooDb
+                ? <span key="odb" className="font-mono text-xs text-gray-500">{tenant.odooDb}</span>
+                : <span key="odb" className="text-xs text-gray-400">—</span>],
+              ['Odoo Modules', tenant.odooModules.length > 0
+                ? <span key="om" className="font-mono text-xs text-gray-500">{tenant.odooModules.join(', ')}</span>
+                : <span key="om" className="text-xs text-gray-400">—</span>],
               ['Plan',         tenant.plan.name],
               ['Price',        `AED ${Number(tenant.finalPriceAed).toFixed(2)} / mo`],
               ['Pricing note', tenant.pricingLabel ?? '—'],
@@ -96,6 +102,42 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
             ))}
           </dl>
         </div>
+
+        {/* Odoo Workspace */}
+        {tenant.odooDb && (
+          <div className="card">
+            <h2 className="text-sm font-semibold text-gray-900 mb-5 pb-3 border-b border-gray-100">
+              Odoo Workspace
+            </h2>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-4">
+              <div>
+                <dt className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Workspace URL</dt>
+                <dd className="text-sm">
+                  <a
+                    href={`https://${tenant.fullDomain}/web`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs text-brand-600 hover:underline"
+                  >
+                    {tenant.fullDomain}/web
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Odoo Database</dt>
+                <dd className="text-sm font-mono text-xs text-gray-600">{tenant.odooDb}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Login</dt>
+                <dd className="text-sm font-mono text-xs text-gray-600">{tenant.email}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Password</dt>
+                <dd className="text-sm text-xs text-gray-400 italic">Signup password (hashed — not retrievable)</dd>
+              </div>
+            </dl>
+          </div>
+        )}
 
         {/* Provisioning error */}
         {tenant.provisioningError && (

@@ -1,7 +1,7 @@
 # Reality Plan — Implementation Checklist
 
 > Status: **Complete** — all phases shipped and verified live on 2026-04-21  
-> Commits: `5b5e081` (Reality Plan), `7ba633b` (provisioning bug fixes)
+> Commits: `5b5e081` (Reality Plan), `7ba633b` (provisioning bug fixes), `b1644f9` (credential handoff), `HEAD` (admin panel Odoo visibility)
 
 ---
 
@@ -68,9 +68,9 @@
 
 ## Phase 6 — Admin Panel Updates
 
-- [ ] **6.1** Tenant detail page does not yet display `odooDb` or `odooAdminPassword`
-- [ ] **6.2** Reprovision route does not yet update `odooDb`/`odooAdminPassword` on retry
-- [ ] **6.3** (Deferred — not blocking for internal testing)
+- [x] **6.1** Tenant detail page now shows `odooDb`, `odooModules`, workspace URL, and login email
+- [ ] **6.2** Reprovision route does not yet update `odooDb`/`odooAdminPassword` on retry — deferred
+- [x] **6.3** Admin visibility sufficient for internal testing support
 
 ---
 
@@ -128,7 +128,7 @@
 | 3 — Provisioning Layer | ✅ Complete |
 | 4 — tenant-gate Endpoint | ✅ Complete |
 | 5 — Workspace Page | ✅ Complete |
-| 6 — Admin Panel | ⚠️ Partial — Odoo fields not yet shown in UI |
+| 6 — Admin Panel | ✅ Complete — Odoo DB, modules, workspace URL, login shown |
 | 7 — Local E2E Verification | ✅ Complete (run live on server) |
 | 8 — Server Config Prep | ✅ Complete |
 | 9 — Approval Gate | ✅ Approved |

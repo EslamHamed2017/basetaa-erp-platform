@@ -1,7 +1,7 @@
 # Stabilization Report — Reality Plan Live Test
 
-> Date: 2026-04-21  
-> Stage: Post-launch stabilization  
+> Date: 2026-04-21 (updated 2026-04-21)  
+> Stage: Internal real-user testing ready  
 > Author: Basetaa Engineering
 
 ---
@@ -88,10 +88,9 @@ proxy_mode = True
 
 | Item | Priority | Action |
 |---|---|---|
-| **Odoo login credentials not given to user** | 🔴 Critical | After signup, the user arrives at Odoo login but doesn't know their credentials. The `odooAdminPassword` is stored in DB but never shown. See "Credential Gap" below. |
+| ~~**Odoo login credentials not given to user**~~ | ✅ Done | Credential handoff implemented (`b1644f9`). After signup, Odoo admin user's login/email/password are set to the user's signup credentials via XML-RPC. |
+| ~~Admin panel: show `odooDb` field~~ | ✅ Done | Tenant detail page now shows Odoo DB, modules, workspace URL, and login email. |
 | `probe_phone_test` Odoo DB | Low | Drop — orphaned debug artifact. `docker exec basetaa-odoo-deploy-db-1 dropdb -U odoo probe_phone_test` |
-| Admin panel: show `odooDb` field | Medium | Tenant detail page should show which Odoo DB is assigned |
-| Admin panel: show/copy `odooAdminPassword` | Medium | Needed for admin to manually assist users with first login |
 
 ### Nice to Do (Not Blocking)
 
@@ -103,29 +102,16 @@ proxy_mode = True
 
 ---
 
-## Critical Gap: Odoo Login Credentials
+## Credential Handoff — Resolved ✅
 
-This is the only blocking issue for real-user testing.
-
-**What happens today:**
+**What happens now:**
 1. User signs up → Odoo DB created with `login=admin`, `password={random 24-byte base64url}`
-2. User visits `acme.erp.basetaa.com` → sees Odoo login page
-3. User has no idea what credentials to enter
+2. Immediately after DB creation, `setOdooTenantCredentials()` is called via XML-RPC
+3. Odoo admin user's `login`, `email`, and `password` are updated to the user's signup credentials
+4. User visits `acme.erp.basetaa.com` → logs in with their signup email and password
 
-**What the user needs:**
-- Their email address as login, and a password they chose at signup
-- OR: a link/page that tells them their initial credentials
-
-**Options (in order of effort):**
-
-| Option | Effort | Notes |
-|---|---|---|
-| A. After DB creation, call Odoo XML-RPC to set admin user's email + password | Medium | Most seamless — user's signup creds work in Odoo directly |
-| B. Show the generated Odoo admin password on the post-signup page | Low | Requires storing + displaying it safely; user must save it |
-| C. Send a welcome email with first-login instructions | Medium | Requires email provider setup (Resend, SendGrid, etc.) |
-| D. Show a "Your workspace is ready" page with a one-time access link | Medium | Requires a token-based first-login flow |
-
-**Recommended:** Option A. After `createOdooDatabase` succeeds, call Odoo's XML-RPC `execute_kw` to update the `res.users` admin record: set `login` = user's email, `password` = user's Basetaa password. This way their signup credentials work in Odoo natively.
+Implemented in `src/lib/odoo-db.ts` (`setOdooTenantCredentials`) and wired in `src/lib/provisioning.ts`.
+Verified live: tenant `credtest0592` — XML-RPC auth with signup credentials returned UID `2`. ✅
 
 ---
 
@@ -139,41 +125,31 @@ This is the only blocking issue for real-user testing.
 | Inactive/pending state pages work | ✅ |
 | SSL covers all domains | ✅ |
 | DNS resolves for all domains | ✅ |
-| User can log into Odoo after signup | ❌ Credentials not provided to user |
-| Admin can see Odoo DB assignment | ❌ Not shown in admin panel |
+| User can log into Odoo after signup | ✅ Signup credentials work directly in Odoo |
+| Admin can see Odoo DB assignment | ✅ Shown in tenant detail page |
 
-**Verdict: Not ready for real users until credential gap is resolved. Ready for internal engineering testing** (team members can retrieve credentials from the DB directly).
+**Verdict: Ready for internal real-user testing.** Users sign up, get a workspace, and log in with the same credentials used at signup. No manual DB access required.
 
 ---
 
 ## Recommended Next Stage
 
-### Stage: Odoo Credential Handoff
+### Stage: Internal Real-User Testing ← current
 
-Before any external or internal user testing, resolve the credential gap:
+All blocking issues are resolved. Run the first internal end-to-end signup:
 
-1. **Implement Odoo XML-RPC user update** in `odoo-db.ts`:
-   - After `createOdooDatabase` returns success, call Odoo XML-RPC
-   - Authenticate as `admin` using `odooAdminPassword`
-   - Update `res.users` record: set `login = userEmail`, `password = userBasetaaPassword`
-   - Now user can log into Odoo with the same email + password they used to sign up
+1. A team member goes to `erp.basetaa.com` and signs up with real credentials
+2. Waits ~15 seconds for provisioning
+3. Visits `{subdomain}.erp.basetaa.com` — should redirect to Odoo login
+4. Logs in with their signup email and password
+5. Confirms they see their company's Odoo workspace
+6. Admin panel at `control.erp.basetaa.com/admin/tenants` confirms the tenant record
 
-2. **Show admin panel Odoo details**:
-   - Tenant detail page: show `odooDb` value
-   - Add a "Reset Odoo Password" admin action for support use
+After passing: open to wider internal team, then external beta.
 
-3. **Add post-signup success page**:
-   - After provisioning completes, show: "Your workspace is ready at `acme.erp.basetaa.com`"
-   - Confirm their login email and prompt them to their Odoo instance
+### Then: Async Provisioning (after internal testing validates the flow)
 
-4. **Internal smoke test**:
-   - One team member signs up end-to-end
-   - Logs into Odoo with their credentials
-   - Confirms they see their company's Odoo workspace
-
-### Then: Async Provisioning (after credential handoff)
-
-The current 12-second synchronous signup is acceptable for now but will degrade under load or for slower DB creation (Odoo can take 60+ seconds). The next improvement is:
+The current ~15-second synchronous signup will degrade under load or for slower DB creation (Odoo can take 60+ seconds on a cold server). Next improvement:
 - Create tenant record immediately (return `workspaceUrl` to user)
 - Spin off DB creation as a background job (queue, worker, or simple async)
 - Show a "provisioning in progress" page at the subdomain until ready
