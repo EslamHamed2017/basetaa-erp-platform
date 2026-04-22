@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { Pool }  from 'pg'
 
 function getOdooUrl(): string {
   const url = process.env.ODOO_URL
@@ -125,6 +126,85 @@ export async function odooDatabaseExists(dbName: string): Promise<boolean> {
   }
 }
 
+// ─── Passlib-compatible pbkdf2-sha512 hash (Odoo 17 uses 600000 rounds) ─────
+
+const AB64 = './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+
+function ab64encode(buf: Buffer): string {
+  let result = ''
+  for (let i = 0; i < buf.length; i += 3) {
+    const b0 = buf[i]
+    const b1 = i + 1 < buf.length ? buf[i + 1] : 0
+    const b2 = i + 2 < buf.length ? buf[i + 2] : 0
+    result += AB64[b0 >> 2]
+    result += AB64[((b0 & 3) << 4) | (b1 >> 4)]
+    result += AB64[((b1 & 15) << 2) | (b2 >> 6)]
+    result += AB64[b2 & 63]
+  }
+  const rem = buf.length % 3
+  if (rem === 1) return result.slice(0, -2)
+  if (rem === 2) return result.slice(0, -1)
+  return result
+}
+
+async function hashOdooPwd(password: string): Promise<string> {
+  const rounds = 600000
+  const salt   = crypto.randomBytes(16)
+  const hash   = await new Promise<Buffer>((res, rej) =>
+    crypto.pbkdf2(password, salt, rounds, 64, 'sha512', (e, k) => e ? rej(e) : res(k))
+  )
+  return `$pbkdf2-sha512$${rounds}$${ab64encode(salt)}$${ab64encode(hash)}`
+}
+
+// When XML-RPC auth fails (stale odooAdminPassword), write credentials directly to the tenant DB.
+async function pgFallbackSetCredentials(
+  dbName: string,
+  userEmail: string,
+  newPassword: string,
+): Promise<{ success: boolean; error?: string }> {
+  const baseUrl = process.env.DATABASE_URL
+  if (!baseUrl) return { success: false, error: 'DATABASE_URL not set — cannot use pg fallback.' }
+
+  const tenantUrl = baseUrl.replace(/\/[^/?]+(\?.*)?$/, `/${dbName}$1`)
+  const pwdHash   = await hashOdooPwd(newPassword)
+  const pool      = new Pool({ connectionString: tenantUrl, max: 1 })
+
+  try {
+    // Update login + password on the active admin (exclude uid=1 OdooBot)
+    const r = await pool.query(
+      `UPDATE res_users
+          SET login    = $1,
+              password = $2
+        WHERE active = true
+          AND id != 1
+          AND (login = $1 OR login = 'admin')`,
+      [userEmail, pwdHash],
+    )
+    if ((r.rowCount ?? 0) === 0) {
+      return { success: false, error: 'pg fallback: no active admin user found in tenant DB.' }
+    }
+
+    // Also sync email on the linked res_partner record
+    await pool.query(
+      `UPDATE res_partner rp
+          SET email = $1
+         FROM res_users ru
+        WHERE ru.partner_id = rp.id
+          AND ru.active = true
+          AND ru.id != 1
+          AND (ru.login = $1 OR ru.login = 'admin')`,
+      [userEmail],
+    )
+
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { success: false, error: `pg fallback failed: ${msg}` }
+  } finally {
+    await pool.end()
+  }
+}
+
 // ─── Set Odoo tenant admin credentials via XML-RPC ───────────────────────────
 
 function escapeXml(str: string): string {
@@ -165,8 +245,9 @@ export async function setOdooTenantCredentials(
         body: xml,
       })
       const body = await res.text()
+      // Match UID only (>1); faultCode responses also contain <int>1</int> which must be excluded
       const m = body.match(/<int>(\d+)<\/int>/)
-      return m && parseInt(m[1]) > 0 ? m[1] : null
+      return m && parseInt(m[1]) > 1 ? m[1] : null
     } catch {
       return null
     }
@@ -175,7 +256,8 @@ export async function setOdooTenantCredentials(
   let uid = await tryAuth(userEmail)
   if (!uid) uid = await tryAuth('admin')
   if (!uid) {
-    return { success: false, error: 'Odoo XML-RPC authentication failed — no UID returned.' }
+    // XML-RPC auth failed (stale odooAdminPassword). Fall back to direct pg write.
+    return pgFallbackSetCredentials(dbName, userEmail, userPassword)
   }
 
   // Step 2: Write login, email, password on the admin res.users record
