@@ -16,6 +16,25 @@ export function generateOdooAdminPassword(): string {
   return crypto.randomBytes(24).toString('base64url')
 }
 
+// ─── Verify a database is healthy (used after creation) ──────────────────────
+
+async function verifyOdooDatabase(dbName: string): Promise<boolean> {
+  // Confirm the DB appears in Odoo's list (proves it was created and is accessible).
+  try {
+    const res = await fetch(`${getOdooUrl()}/web/database/list`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({}),
+    })
+    if (!res.ok) return false
+    const data = await res.json() as { result?: string[] }
+    const list: string[] = data.result ?? (data as unknown as string[])
+    return Array.isArray(list) && list.includes(dbName)
+  } catch {
+    return false
+  }
+}
+
 // ─── Create a new Odoo database ──────────────────────────────────────────────
 
 export async function createOdooDatabase(
@@ -50,6 +69,12 @@ export async function createOdooDatabase(
   if (res.status === 303 || res.status === 302 || res.status === 200) {
     // Distinguish success (redirect) from failure (200 with error body)
     if (res.status === 303 || res.status === 302) {
+      // Verify the new database is actually serving before reporting success.
+      // A newly created DB should immediately appear in the database list.
+      const healthy = await verifyOdooDatabase(dbName)
+      if (!healthy) {
+        return { success: false, error: `Database "${dbName}" was created but Odoo is not serving it correctly. Check Odoo logs.` }
+      }
       return { success: true }
     }
     // 200 may mean success (older Odoo) or an error page
