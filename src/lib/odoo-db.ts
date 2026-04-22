@@ -119,36 +119,39 @@ export async function setOdooTenantCredentials(
 ): Promise<{ success: boolean; error?: string }> {
   const base = getOdooUrl()
 
-  // Step 1: Authenticate as admin to obtain UID
-  const authXml = `<?xml version="1.0"?>
+  // Step 1: Authenticate to obtain UID.
+  // Try userEmail first (post-credential-handoff tenants have email as login),
+  // then fall back to 'admin' (pre-handoff tenants provisioned with old flow).
+  async function tryAuth(login: string): Promise<string | null> {
+    const xml = `<?xml version="1.0"?>
 <methodCall>
   <methodName>authenticate</methodName>
   <params>
     <param><value><string>${escapeXml(dbName)}</string></value></param>
-    <param><value><string>admin</string></value></param>
+    <param><value><string>${escapeXml(login)}</string></value></param>
     <param><value><string>${escapeXml(odooAdminPassword)}</string></value></param>
     <param><value><struct/></value></param>
   </params>
 </methodCall>`
-
-  let authRes: Response
-  try {
-    authRes = await fetch(`${base}/xmlrpc/2/common`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/xml' },
-      body: authXml,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return { success: false, error: `Odoo XML-RPC unreachable: ${msg}` }
+    try {
+      const res = await fetch(`${base}/xmlrpc/2/common`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/xml' },
+        body: xml,
+      })
+      const body = await res.text()
+      const m = body.match(/<int>(\d+)<\/int>/)
+      return m && parseInt(m[1]) > 0 ? m[1] : null
+    } catch {
+      return null
+    }
   }
 
-  const authBody = await authRes.text()
-  const uidMatch = authBody.match(/<int>(\d+)<\/int>/)
-  if (!uidMatch) {
+  let uid = await tryAuth(userEmail)
+  if (!uid) uid = await tryAuth('admin')
+  if (!uid) {
     return { success: false, error: 'Odoo XML-RPC authentication failed — no UID returned.' }
   }
-  const uid = uidMatch[1]
 
   // Step 2: Write login, email, password on the admin res.users record
   const writeXml = `<?xml version="1.0"?>
