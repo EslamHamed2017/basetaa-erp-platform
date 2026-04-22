@@ -128,23 +128,9 @@ export async function odooDatabaseExists(dbName: string): Promise<boolean> {
 
 // ─── Passlib-compatible pbkdf2-sha512 hash (Odoo 17 uses 600000 rounds) ─────
 
-const AB64 = './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-
+// passlib AB64 = standard base64 with '+' replaced by '.' and no padding
 function ab64encode(buf: Buffer): string {
-  let result = ''
-  for (let i = 0; i < buf.length; i += 3) {
-    const b0 = buf[i]
-    const b1 = i + 1 < buf.length ? buf[i + 1] : 0
-    const b2 = i + 2 < buf.length ? buf[i + 2] : 0
-    result += AB64[b0 >> 2]
-    result += AB64[((b0 & 3) << 4) | (b1 >> 4)]
-    result += AB64[((b1 & 15) << 2) | (b2 >> 6)]
-    result += AB64[b2 & 63]
-  }
-  const rem = buf.length % 3
-  if (rem === 1) return result.slice(0, -2)
-  if (rem === 2) return result.slice(0, -1)
-  return result
+  return buf.toString('base64').replace(/\+/g, '.').replace(/=/g, '')
 }
 
 async function hashOdooPwd(password: string): Promise<string> {
