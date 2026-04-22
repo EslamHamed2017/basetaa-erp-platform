@@ -173,6 +173,9 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
           status: tenant.status,
           provisioningState: tenant.provisioningState,
           isActive: tenant.isActive,
+          normalizedSubdomain: tenant.normalizedSubdomain,
+          companyName: tenant.companyName,
+          odooDb: tenant.odooDb,
         }} />
       </main>
     </div>

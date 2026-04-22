@@ -195,7 +195,6 @@ export async function setOdooTenantCredentials(
 }
 
 // ─── Drop an Odoo database ────────────────────────────────────────────────────
-// Not used in Reality Plan MVP — reserved for future delete-tenant action.
 
 export async function dropOdooDatabase(
   dbName: string,
@@ -218,8 +217,25 @@ export async function dropOdooDatabase(
     return { success: false, error: `Odoo unreachable: ${msg}` }
   }
 
-  if (res.status === 303 || res.status === 302 || res.status === 200) {
+  // Odoo 17 redirects on success; 200 means an error page was returned
+  if (res.status === 303 || res.status === 302) {
     return { success: true }
   }
+
+  if (res.status === 200) {
+    const text = await res.text()
+    if (text.includes('Invalid master password') || text.includes('AccessDenied')) {
+      return { success: false, error: 'Invalid Odoo master password.' }
+    }
+    if (text.includes('database manager has been disabled')) {
+      return { success: false, error: 'Odoo database manager is disabled.' }
+    }
+    if (text.includes('does not exist') || text.includes("doesn't exist")) {
+      // DB already gone — treat as success to keep delete idempotent
+      return { success: true }
+    }
+    return { success: false, error: `Odoo drop returned 200 (unexpected): ${text.slice(0, 200)}` }
+  }
+
   return { success: false, error: `Unexpected Odoo response: HTTP ${res.status}` }
 }

@@ -119,7 +119,10 @@ export async function provisionTenant(input: SignupInput): Promise<SignupResult>
       throw new Error(`Odoo credential handoff failed: ${credResult.error}`)
     }
 
-    // 9. Mark as ready + store Odoo credentials
+    // 9. Mark as ready + store Odoo credentials.
+    // odooAdminPassword is updated to `password` (the signup password) because
+    // setOdooTenantCredentials changed the Odoo admin user's password to it.
+    // This field always holds the current valid credential for service XML-RPC auth.
     await prisma.tenant.update({
       where: { id: tenant.id },
       data: {
@@ -128,7 +131,7 @@ export async function provisionTenant(input: SignupInput): Promise<SignupResult>
         isActive: true,
         provisioningError: null,
         odooDb: dbName,
-        odooAdminPassword,
+        odooAdminPassword: password,
         odooModules: ['base'],
       },
     })
